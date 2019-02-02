@@ -15,7 +15,7 @@
  *
  * NOTE: libzfs is an unstable interface. YMMV.
  *
- * Copyright 2018 Richard Elling
+ * Copyright 2018-2019 Richard Elling
  *
  * The MIT License (MIT)
  *
@@ -49,6 +49,7 @@
 #define POOL_MEASUREMENT        "zpool_stats"
 #define SCAN_MEASUREMENT        "zpool_scan_stats"
 #define POOL_LATENCY_MEASUREMENT        "zpool_latency"
+#define POOL_QUEUE_MEASUREMENT  "zpool_vdev"
 #define MIN_LAT_INDEX        10  /* minimum latency index 10 = 1024ns */
 
 /*
@@ -332,6 +333,55 @@ print_top_level_latency_stats(nvlist_t *nvroot, const char *pool_name) {
 }
 
 /*
+ * top-level queue stats
+ */
+int
+print_top_level_queue_stats(nvlist_t *nvroot, const char *pool_name) {
+	nvlist_t *nv_ex;
+	uint64_t value;
+	char *p = POOL_QUEUE_MEASUREMENT;
+	char s[2 * ZFS_MAX_DATASET_NAME_LEN];
+
+	/* short_names become part of the metric name */
+	struct queue_lookup {
+	    char *name;
+	    char *short_name;
+	};
+	struct queue_lookup queue_type[] = {
+	    {ZPOOL_CONFIG_VDEV_SYNC_R_ACTIVE_QUEUE, "sync_r_active_queue"},
+	    {ZPOOL_CONFIG_VDEV_SYNC_W_ACTIVE_QUEUE, "sync_w_active_queue"},
+	    {ZPOOL_CONFIG_VDEV_ASYNC_R_ACTIVE_QUEUE, "async_r_active_queue"},
+	    {ZPOOL_CONFIG_VDEV_ASYNC_W_ACTIVE_QUEUE, "async_w_active_queue"},
+	    {ZPOOL_CONFIG_VDEV_SCRUB_ACTIVE_QUEUE, "async_scrub_active_queue"},
+	    {ZPOOL_CONFIG_VDEV_SYNC_R_PEND_QUEUE, "sync_r_pend_queue"},
+	    {ZPOOL_CONFIG_VDEV_SYNC_W_PEND_QUEUE, "sync_w_pend_queue"},
+	    {ZPOOL_CONFIG_VDEV_ASYNC_R_PEND_QUEUE, "async_r_pend_queue"},
+	    {ZPOOL_CONFIG_VDEV_ASYNC_W_PEND_QUEUE, "async_w_pend_queue"},
+	    {ZPOOL_CONFIG_VDEV_SCRUB_PEND_QUEUE, "async_scrub_pend_queue"},
+	    {NULL, NULL}
+	};
+
+	if (nvlist_lookup_nvlist(nvroot,
+	    ZPOOL_CONFIG_VDEV_STATS_EX, &nv_ex) != 0) {
+		return (6);
+	}
+
+	(void) snprintf(s, sizeof(s), "name=\"%s\",vdev=\"%s\"",
+	    pool_name, "top");
+
+	for (int i = 0; queue_type[i].name; i++) {
+		if (nvlist_lookup_uint64(nv_ex,
+		    queue_type[i].name, (uint64_t *) &value) != 0) {
+			fprintf(stderr, "error: can't get %s\n",
+			    queue_type[i].name);
+			return (3);
+		}
+		print_prom_u64(p, queue_type[i].short_name, s, value,
+		    "queue depth", "gauge");
+	}
+}
+
+/*
  * top-level summary stats are at the pool level
  */
 int
@@ -420,6 +470,9 @@ print_stats(zpool_handle_t *zhp, void *data) {
 
 	if (err == 0)
 		err = print_top_level_latency_stats(nvroot, pool_name);
+
+	if (err == 0)
+		err = print_top_level_queue_stats(nvroot, pool_name);
 
 	free(pool_name);
 	return (0);
