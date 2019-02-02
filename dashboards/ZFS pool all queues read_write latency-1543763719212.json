@@ -137,7 +137,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_tot_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_tot_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -231,7 +231,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_tot_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_tot_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -338,7 +338,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_sync_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_sync_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -432,7 +432,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_async_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_async_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -526,7 +526,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_scrub_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_scrub_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -620,7 +620,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_disk_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_disk_r_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -714,7 +714,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_sync_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_sync_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -808,7 +808,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_async_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_async_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -902,7 +902,7 @@
       "links": [],
       "targets": [
         {
-          "expr": "irate(node_zpool_latency_vdev_disk_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
+          "expr": "irate(zpool_latency_vdev_disk_w_lat_histo_seconds_bucket{instance=~\"^$hostname:.*\",name=\"$pool_name\", le=~\"^[0-9].*\"}[5m]) ",
           "format": "heatmap",
           "groupBy": [
             {
@@ -1144,7 +1144,7 @@
         "multi": false,
         "name": "hostname",
         "options": [],
-        "query": "label_values(node_zpool_latency_vdev_tot_r_lat_histo_seconds_bucket, instance)",
+        "query": "label_values(zpool_latency_vdev_tot_r_lat_histo_seconds_bucket, instance)",
         "refresh": 1,
         "regex": "/(.*):/",
         "sort": 0,
@@ -1164,7 +1164,7 @@
         "multi": false,
         "name": "pool_name",
         "options": [],
-        "query": "label_values(node_zpool_latency_vdev_tot_r_lat_histo_seconds_bucket, name)",
+        "query": "label_values(zpool_latency_vdev_tot_r_lat_histo_seconds_bucket, name)",
         "refresh": 1,
         "regex": "",
         "sort": 0,

@@ -22,16 +22,17 @@ The following metric types are collected:
 | zpool_stats | general size and data | zpool list |
 | zpool_scan_stats | scrub, rebuild, and resilver statistics | zpool status |
 | zpool_latency | latency histograms for the top-level pool vdev | zpool iostat -w |
+| zpool_vdev | per-vdev stats, currently queues | zpool iostat -q | 
 
 To be consistent with other prometheus collectors, each
 metric has HELP and TYPE comments.
 
 ### Metric Names
 Metric names are a mashup of:<br>
-**node_\<type as above>\_\<ZFS internal name>\_\<units>**
+**\<type as above>\_\<ZFS internal name>\_\<units>**
 
 For example, the pool's size metric is:<br>
-**node_zpool_stats_size_bytes**
+**zpool_stats_size_bytes**
 
 ### Labels
 The following labels are added to the metrics:
