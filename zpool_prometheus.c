@@ -103,7 +103,7 @@ void
 print_prom_u64(char *prefix, char *metric, char *label, uint64_t value,
                char *help, char *type) {
 	char metric_name[200];
-	(void) snprintf(metric_name, 200, "node_%s_%s", prefix, metric);
+	(void) snprintf(metric_name, 200, "%s_%s", prefix, metric);
 	if (help != NULL)
 		(void) printf("# HELP %s %s\n", metric_name, help);
 	if (type != NULL)
@@ -119,7 +119,7 @@ void
 print_prom_d(char *prefix, char *metric, char *label, double value,
                char *help, char *type) {
 	char metric_name[200];
-	(void) snprintf(metric_name, 200, "node_%s_%s", prefix, metric);
+	(void) snprintf(metric_name, 200, "%s_%s", prefix, metric);
 	if (help != NULL)
 		(void) printf("# HELP %s %s\n", metric_name, help);
 	if (type != NULL)
@@ -290,9 +290,9 @@ print_top_level_latency_stats(nvlist_t *nvroot, const char *pool_name) {
 		sum = 0;
 		end = c - 1;
 		(void) printf(
-		    "# HELP node_%s_%s_seconds latency distribution\n",
+		    "# HELP %s_%s_seconds latency distribution\n",
 		    p, lat_type[i].name);
-		(void) printf("# TYPE node_%s_%s_seconds histogram\n",
+		(void) printf("# TYPE %s_%s_seconds histogram\n",
 		    p, lat_type[i].name);
 		for (int j = 0; j <= end; j++) {
 			sum += lat_array[j];
