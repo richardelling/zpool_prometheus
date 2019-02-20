@@ -17,12 +17,12 @@ do not have the latency histograms. Pull requests are welcome.
 ## Metrics Categories
 The following metric types are collected:
 
-| type | description | zpool equivalent |
-|---|---|---|
-| zpool_stats | general size and data | zpool list |
-| zpool_scan_stats | scrub, rebuild, and resilver statistics | zpool status |
-| zpool_latency | latency histograms for the top-level pool vdev | zpool iostat -w |
-| zpool_vdev | per-vdev stats, currently queues | zpool iostat -q | 
+| type | description | recurse? | zpool equivalent |
+|---|---|---|---|
+| zpool_stats | general size and data | yes | zpool list |
+| zpool_scan_stats | scrub, rebuild, and resilver statistics | n/a | zpool status |
+| zpool_latency | latency histograms for vdev | yes | zpool iostat -w |
+| zpool_vdev | per-vdev stats, currently queues | no | zpool iostat -q | 
 
 To be consistent with other prometheus collectors, each
 metric has HELP and TYPE comments.
@@ -37,16 +37,84 @@ For example, the pool's size metric is:<br>
 ### Labels
 The following labels are added to the metrics:
 
-| label | description |
-|---|---|
-| name | pool name |
-| state | pool state, as shown by _zpool status_ |
+| label | metric | description |
+|---|---|---|
+| name | all | pool name |
+| state | zpool_stats | pool state, as shown by _zpool status_ |
+| state | zpool_scan_stats | scan state, as shown by _zpool status_ |
+| vdev | zpool_stats, zpool_latency, zpool_vdev | vdev name |
+| path | zpool_latency | device path name, if available |
+
+#### vdev names
+The vdev names represent the heirarchy of the pool configuration.
+The top of the pool is "root" and the pool configuration follows 
+beneath. A slash '/' is used to separate the levels.
+
+For example, a simple pool with a single disk can have a `zpool status` of:
+```
+
+	NAME       STATE     READ WRITE CKSUM
+	testpool   ONLINE       0     0     0
+	  sdb      ONLINE       0     0     0
+```
+where the internal vdev hierarchy is:
+```
+root
+root/disk-0
+```
+A more complex pool can have logs and redundancy. For example:
+```
+	NAME         STATE     READ WRITE CKSUM
+	testpool     ONLINE       0     0     0
+	  sda        ONLINE       0     0     0
+	  sdb        ONLINE       0     0     0
+	special	
+	  mirror-2   ONLINE       0     0     0
+	    sdc      ONLINE       0     0     0
+	    sde      ONLINE       0     0     0
+```
+were the internal vdev hierarchy is:
+```
+root
+root/disk-0
+root/disk-1
+root/mirror-2
+root/mirror-2/disk-0
+root/mirror-2/disk-1
+```
+Note that the special device does not carry a special description.
+Log, cache, and spares are similarly not described in the hierarchy.
+
+In some cases, the hierarchy can change over time. For example, if a 
+vdev is removed, replaced, or attached then the heirarchy can grow or 
+shrink as the vdevs come and go. Thus to determine the stats for a specific
+physical device, use the `path`
+
+#### path names
+When a vdev has an associated path, then the path's name is placed
+in the `path` value. For example:
+```
+path="/dev/sde1"
+```
+For brevity, the `zpool status` command often simplifies and truncates the
+path name. Also, the `path` name can change upon reboot. 
+Care should be taken to properly match the `path` of the desired device
+when creating the pool or when querying in PromQL.
+
+In an ideal world, the `devid` is a better direct method of uniquely 
+identifying the device in Solaris-derived OSes. However, in Linux the 
+`devid` is even less reliable than the `path`
 
 ### Values
 Currently, [prometheus](https://github.com/prometheus) values must be
-type float. This is unfortunate because many ZFS metrics are 64-bit 
-unsigned ints. When the actual metric values exceed the mantissa 
-size of the floats, hilarity ensues.
+type float64. This is unfortunate because many ZFS metrics are 64-bit 
+unsigned ints. When the actual metric values exceed the significant 
+size of the floats (52 bits) then the value resets. This prevents problems
+that occur due loss of resolution as the least significant bits are ignored
+during the conversion to float64.
+
+Pro tip: use PromQL rate(), irate() or some sort of non-negative derivative 
+(influxdb or graphite) for these counters.
 
 ## Building
 Building is simplified by using cmake.
