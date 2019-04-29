@@ -377,6 +377,9 @@ print_vdev_latency_stats(nvlist_t *nvroot, const char *pool_name,
 	    {ZPOOL_CONFIG_VDEV_ASYNC_R_LAT_HISTO, "async_read"},
 	    {ZPOOL_CONFIG_VDEV_ASYNC_W_LAT_HISTO, "async_write"},
 	    {ZPOOL_CONFIG_VDEV_SCRUB_LAT_HISTO,   "scrub"},
+#ifdef ZPOOL_CONFIG_VDEV_TRIM_LAT_HISTO
+	    {ZPOOL_CONFIG_VDEV_TRIM_LAT_HISTO,    "trim"},
+#endif
 	    {NULL,                                NULL}
 	};
 
