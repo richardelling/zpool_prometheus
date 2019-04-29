@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.7)
 project(zpool_prometheus C)
 
 # by default ZFSonLinux installs the header files and libraries in /usr/local
