@@ -124,9 +124,22 @@ installs the necessary header and library files in _/usr/local_.
 If you place those files elsewhere, then edit _CMakeLists.txt_ and
 change the _INSTALL_DIR_
 ```bash
+# generic ZFSonLinux build
 cmake .
 make
 ```
+
+For Ubuntu, versions 16+ include ZFS packages, but not all are installed
+by default. In particular, the required header files are in the
+`libzfslinux-dev` package. This changes the process slightly:
+```
+# Ubuntu 16+ build
+apt install libzfslinux-dev
+mv CMakeLists.ubuntu.txt CMakeLists.txt
+cmake .
+make 
+```
+
 If successful, the _zpool_prometheus_ executable is created.
 
 ## Installing
