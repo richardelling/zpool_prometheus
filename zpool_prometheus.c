@@ -622,9 +622,22 @@ print_summary_stats(nvlist_t *nvroot, const char *pool_name,
 	    ZPOOL_CONFIG_VDEV_STATS, (uint64_t **) &vs, &c) != 0) {
 		return (0);
 	}
+	/*
+	 * Include the state of the vdev as a prometheus label. This allows
+	 * for filtering in queries. However, these do no map directly to all
+	 * of the possible human-readable names in the zpool(8) command output.
+	 * For example, a healthy spare has state "AVAIL" in zpool, but "ONLINE" here.
+	 */
 	(void) snprintf(l, sizeof(l), "name=\"%s\",state=\"%s\",vdev=\"%s\"",
 	    pool_name, zpool_state_to_name(vs->vs_state, vs->vs_aux),
 	    vdev_name);
+
+	/* Show the raw state enums. See zfs.h for the current descriptions	 */
+	print_prom_u64(p, "state", l, vs->vs_state, "current state, see zfs.h",
+	    "gauge");
+    print_prom_u64(p, "aux_state", l, vs->vs_aux, "auxiliary state, see zfs.h",
+        "gauge");
+
 	print_prom_u64(p, "alloc_bytes", l, vs->vs_alloc,
 	    "allocated size", "gauge");
 	print_prom_u64(p, "free_bytes", l, vs->vs_space - vs->vs_alloc,
