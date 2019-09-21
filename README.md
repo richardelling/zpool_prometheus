@@ -10,6 +10,7 @@ statistics normally observed via the _zpool_ command.
 There are many implementations of ZFS on many OSes. The current
 version is tested to work on:
 * [ZFSonLinux](https://github.com/zfsonlinux/zfs) version 0.7 and later
+* [cstor](https://github.com/openebs/cstor) userland ZFS for kubernetes
 
 This should compile and run on other ZFS versions, though many 
 do not have the latency histograms. Pull requests are welcome.
@@ -23,6 +24,7 @@ The following metric types are collected:
 | zpool_scan_stats | scrub, rebuild, and resilver statistics | n/a | zpool status |
 | zpool_latency | latency histograms for vdev | yes | zpool iostat -w |
 | zpool_vdev | per-vdev stats, currently queues | no | zpool iostat -q | 
+| zpool_req | per-vdev request size stats | yes | zpool iostat -r |
 
 To be consistent with other prometheus collectors, each
 metric has HELP and TYPE comments.
