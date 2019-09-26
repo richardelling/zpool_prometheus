@@ -616,7 +616,7 @@ print_summary_stats(nvlist_t *nvroot, const char *pool_name,
 	vdev_stat_t *vs;
 	char *p = POOL_MEASUREMENT;
 	char l[2 * ZFS_MAX_DATASET_NAME_LEN];
-	char *vdev_name = get_vdev_name(nvroot, parent_name);
+	char *vdev_desc = get_vdev_desc(nvroot, parent_name);
 
 	if (nvlist_lookup_uint64_array(nvroot,
 	    ZPOOL_CONFIG_VDEV_STATS, (uint64_t **) &vs, &c) != 0) {
@@ -628,9 +628,8 @@ print_summary_stats(nvlist_t *nvroot, const char *pool_name,
 	 * of the possible human-readable names in the zpool(8) command output.
 	 * For example, a healthy spare has state "AVAIL" in zpool, but "ONLINE" here.
 	 */
-	(void) snprintf(l, sizeof(l), "name=\"%s\",state=\"%s\",vdev=\"%s\"",
-	    pool_name, zpool_state_to_name(vs->vs_state, vs->vs_aux),
-	    vdev_name);
+	(void) snprintf(l, sizeof(l), "name=\"%s\",%s,state=\"%s\"",
+	    pool_name, vdev_desc, zpool_state_to_name(vs->vs_state, vs->vs_aux));
 
 	/* Show the raw state enums. See zfs.h for the current descriptions	 */
 	print_prom_u64(p, "state", l, vs->vs_state, "current state, see zfs.h",
