@@ -52,6 +52,8 @@
 #define POOL_LATENCY_MEASUREMENT        "zpool_latency"
 #define POOL_QUEUE_MEASUREMENT  "zpool_vdev"
 #define MIN_LAT_INDEX        10  /* minimum latency index 10 = 1024ns */
+#define POOL_IO_SIZE_MEASUREMENT        "zpool_req"
+#define MIN_SIZE_INDEX        9  /* minimum size index 9 = 512 bytes */
 
 /*
  * in cases where ZFS is installed, but not the ZFS dev environment, copy in
@@ -443,6 +445,113 @@ print_vdev_latency_stats(nvlist_t *nvroot, const char *pool_name,
 }
 
 /*
+ * vdev request size stats are histograms stored as nvlist arrays of uint64.
+ * Request size stats include the ZIO scheduler classes plus lower-level
+ * vdev sizes. Both independent (ind) and aggregated (agg) sizes are reported.
+ *
+ * In many cases, the top-level "root" view obscures the underlying
+ * top-level vdev operations. For example, if a pool has a log, special,
+ * or cache device, then each can behave very differently. It is useful
+ * to see how each is responding.
+ */
+int
+print_vdev_size_stats(nvlist_t *nvroot, const char *pool_name,
+                         const char *parent_name) {
+    uint_t c, end;
+    nvlist_t *nv, *nv_ex;
+    uint64_t *size_array;
+    uint64_t sum;
+    char *p = POOL_IO_SIZE_MEASUREMENT;
+    char s[2 * ZFS_MAX_DATASET_NAME_LEN];
+    char t[2 * ZFS_MAX_DATASET_NAME_LEN];
+    char *vdev_desc = NULL;
+
+    /* short_names become part of the metric name */
+    struct size_lookup {
+        char *name;
+        char *short_name;
+    };
+    struct size_lookup size_type[] = {
+            {ZPOOL_CONFIG_VDEV_SYNC_IND_R_HISTO,   "sync_read_ind"},
+            {ZPOOL_CONFIG_VDEV_SYNC_IND_W_HISTO,   "synd_write_ind"},
+            {ZPOOL_CONFIG_VDEV_ASYNC_IND_R_HISTO,  "async_read_ind"},
+            {ZPOOL_CONFIG_VDEV_ASYNC_IND_W_HISTO,  "async_write_ind"},
+            {ZPOOL_CONFIG_VDEV_IND_SCRUB_HISTO,    "scrub_read_ind"},
+            {ZPOOL_CONFIG_VDEV_SYNC_AGG_R_HISTO,   "sync_read_agg"},
+            {ZPOOL_CONFIG_VDEV_SYNC_AGG_W_HISTO,   "sync_write_agg"},
+            {ZPOOL_CONFIG_VDEV_ASYNC_AGG_R_HISTO,  "async_read_agg"},
+            {ZPOOL_CONFIG_VDEV_ASYNC_AGG_W_HISTO,  "async_write_agg"},
+            {ZPOOL_CONFIG_VDEV_AGG_SCRUB_HISTO,    "scrub_read_agg"},
+#ifdef ZPOOL_CONFIG_VDEV_IND_TRIM_HISTO
+            {ZPOOL_CONFIG_VDEV_IND_TRIM_HISTO,    "trim_write_ind"},
+            {ZPOOL_CONFIG_VDEV_AGG_TRIM_HISTO,    "trim_write_agg"},
+#endif
+            {NULL,                                NULL}
+    };
+
+    if (nvlist_lookup_nvlist(nvroot,
+            ZPOOL_CONFIG_VDEV_STATS_EX, &nv_ex) != 0) {
+        return (6);
+    }
+
+    vdev_desc = get_vdev_desc(nvroot, parent_name);
+
+    for (int i = 0; size_type[i].name; i++) {
+        if (nvlist_lookup_uint64_array(nv_ex,
+                size_type[i].name, (uint64_t **) &size_array, &c) != 0) {
+            fprintf(stderr, "error: can't get %s\n",
+                    size_type[i].name);
+            return (3);
+        }
+        /* count */
+        sum = 0;
+        end = c - 1;
+        (void) printf(
+                "# HELP %s_%s_bytes I/O request size distribution\n",
+                p, size_type[i].short_name);
+        (void) printf("# TYPE %s_%s_bytes histogram\n",
+                p, size_type[i].short_name);
+        for (int j = 0; j <= end; j++) {
+            sum += size_array[j];
+            (void) snprintf(s, sizeof(s),
+                    "%s_bytes_bucket", size_type[i].short_name);
+
+            if (j >= MIN_SIZE_INDEX && j <= end) {
+                (void) snprintf(t, sizeof(t),
+                                "name=\"%s\",%s,le=\"%d\"",
+                                pool_name, vdev_desc, 1 << j);
+                print_prom_u64(p, s, t, sum,
+                               NULL, NULL);
+            }
+            if (j == end) {
+                (void) snprintf(t, sizeof(t),
+                                "name=\"%s\",%s,le=\"+Inf\"",
+                                pool_name, vdev_desc);
+                print_prom_u64(p, s, t, sum,
+                               NULL, NULL);
+
+                /*
+                 * TODO: zpool code update to include sum?
+                 * Though sum is useless here and arguably redundant with other
+                 * I/O size measurements. Does it makes sense to sum?
+                 */
+                (void) snprintf(s, sizeof(s),
+                                "%s_bytes_sum", size_type[i].short_name);
+                (void) snprintf(t, sizeof(t),
+                                "name=\"%s\",%s",
+                                pool_name, vdev_desc);
+                print_prom_u64(p, s, t, 0, NULL, NULL);
+
+                (void) snprintf(s, sizeof(s),
+                                "%s_bytes_count", size_type[i].short_name);
+                print_prom_u64(p, s, t, sum, NULL, NULL);
+            }
+        }
+    }
+    return (0);
+}
+
+/*
  * ZIO scheduler queue stats are stored as gauges. This is unfortunate
  * because the values can change very rapidly and any point-in-time
  * value will quickly be obsoleted. It is also not easy to downsample.
@@ -513,9 +622,22 @@ print_summary_stats(nvlist_t *nvroot, const char *pool_name,
 	    ZPOOL_CONFIG_VDEV_STATS, (uint64_t **) &vs, &c) != 0) {
 		return (0);
 	}
+	/*
+	 * Include the state of the vdev as a prometheus label. This allows
+	 * for filtering in queries. However, these do no map directly to all
+	 * of the possible human-readable names in the zpool(8) command output.
+	 * For example, a healthy spare has state "AVAIL" in zpool, but "ONLINE" here.
+	 */
 	(void) snprintf(l, sizeof(l), "name=\"%s\",state=\"%s\",vdev=\"%s\"",
 	    pool_name, zpool_state_to_name(vs->vs_state, vs->vs_aux),
 	    vdev_name);
+
+	/* Show the raw state enums. See zfs.h for the current descriptions	 */
+	print_prom_u64(p, "state", l, vs->vs_state, "current state, see zfs.h",
+	    "gauge");
+    print_prom_u64(p, "aux_state", l, vs->vs_aux, "auxiliary state, see zfs.h",
+        "gauge");
+
 	print_prom_u64(p, "alloc_bytes", l, vs->vs_alloc,
 	    "allocated size", "gauge");
 	print_prom_u64(p, "free_bytes", l, vs->vs_space - vs->vs_alloc,
@@ -621,6 +743,9 @@ print_stats(zpool_handle_t *zhp, void *data) {
 	if (err == 0)
 		err = print_recursive_stats(print_vdev_latency_stats, nvroot,
 		    pool_name, NULL, 1);
+    if (err == 0)
+        err = print_recursive_stats(print_vdev_size_stats, nvroot,
+            pool_name, NULL, 1);
 	if (err == 0)
 		err = print_recursive_stats(print_queue_stats, nvroot,
 		    pool_name, NULL, 0);
