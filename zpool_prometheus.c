@@ -630,7 +630,7 @@ print_summary_stats(nvlist_t *nvroot, const char *pool_name,
 	 */
 	(void) snprintf(l, sizeof(l), "name=\"%s\",state=\"%s\",%s",
 	    pool_name, zpool_state_to_name(vs->vs_state, vs->vs_aux),
-            vdev_name);
+            vdev_desc);
 
 	/* Show the raw state enums. See zfs.h for the current descriptions	 */
 	print_prom_u64(p, "state", l, vs->vs_state, "current state, see zfs.h",
