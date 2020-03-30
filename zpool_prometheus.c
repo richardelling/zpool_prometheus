@@ -234,8 +234,8 @@ print_scan_status(nvlist_t *nvroot, const char *pool_name) {
 	} else {
 		elapsed = ps->pss_end_time - ps->pss_pass_start - paused_time;
 		elapsed = (elapsed > 0) ? elapsed : 1;
-		scan_rate = pass_scanned / elapsed;
-		issue_rate = pass_issued / elapsed;
+		scan_rate = 0;
+		issue_rate = 0;
 		remaining_time = 0;
 		to_issue = 0;
 	}
