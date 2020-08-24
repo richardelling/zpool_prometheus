@@ -45,15 +45,18 @@
 #include <time.h>
 #include <libzfs.h>
 #include <string.h>
+#include <libnvpair.h>
 
-#define COMMAND_NAME    "zpool_prometheus"
-#define POOL_MEASUREMENT        "zpool_stats"
-#define SCAN_MEASUREMENT        "zpool_scan_stats"
-#define POOL_LATENCY_MEASUREMENT        "zpool_latency"
-#define POOL_QUEUE_MEASUREMENT  "zpool_vdev"
-#define MIN_LAT_INDEX        10  /* minimum latency index 10 = 1024ns */
-#define POOL_IO_SIZE_MEASUREMENT        "zpool_req"
-#define MIN_SIZE_INDEX        9  /* minimum size index 9 = 512 bytes */
+#define	COMMAND_NAME	"zpool_prometheus"
+#define	POOL_MEASUREMENT	"zpool_stats"
+#define	SCAN_MEASUREMENT	"zpool_scan_stats"
+#define	POOL_LATENCY_MEASUREMENT	"zpool_latency"
+#define	POOL_QUEUE_MEASUREMENT	"zpool_vdev"
+#define	MIN_LAT_INDEX		10  /* minimum latency index 10 = 1024ns */
+#define	POOL_IO_SIZE_MEASUREMENT	"zpool_req"
+#define	MIN_SIZE_INDEX		9  /* minimum size index 9 = 512 bytes */
+
+nvlist_t *metric_names = NULL;  /* list of metric names with help/type */
 
 /*
  * in cases where ZFS is installed, but not the ZFS dev environment, copy in
@@ -61,15 +64,15 @@
  */
 #ifndef _LIBZFS_IMPL_H
 struct zpool_handle {
-    libzfs_handle_t *zpool_hdl;
-    zpool_handle_t *zpool_next;
-    char zpool_name[ZFS_MAX_DATASET_NAME_LEN];
-    int zpool_state;
-    size_t zpool_config_size;
-    nvlist_t *zpool_config;
-    nvlist_t *zpool_old_config;
-    nvlist_t *zpool_props;
-    diskaddr_t zpool_start_block;
+	libzfs_handle_t *zpool_hdl;
+	zpool_handle_t *zpool_next;
+	char zpool_name[ZFS_MAX_DATASET_NAME_LEN];
+	int zpool_state;
+	size_t zpool_config_size;
+	nvlist_t *zpool_config;
+	nvlist_t *zpool_old_config;
+	nvlist_t *zpool_props;
+	diskaddr_t zpool_start_block;
 };
 #endif
 
@@ -103,6 +106,24 @@ escape_string(char *s) {
 }
 
 /*
+ * print help or type values for a given metric name
+ */
+void
+print_help_type(char *metric_name, char *help, char *type) {
+	char *strval;
+	if (nvlist_lookup_string(metric_names, metric_name, &strval) != 0) {
+		if (help != NULL)
+			(void) printf("# HELP %s %s\n", metric_name, help);
+		if (type != NULL)
+			(void) printf("# TYPE %s %s\n", metric_name, type);
+		if (nvlist_add_string(metric_names, metric_name, "") != 0) {
+			fprintf(stderr, "error: cannot allocate memory\n");
+			exit(1);
+		}
+	}
+}
+
+/*
  * As of early 2019, prometheus only has a float64 data type.
  * This is unfortunate because ZFS uses mostly uint64 data type.
  * For high-speed systems or slow-speed systems that have been up
@@ -123,14 +144,12 @@ print_prom_u64(char *prefix, char *metric, char *label, uint64_t value,
 
 	(void) snprintf(metric_name, sizeof(metric_name), "%s_%s", prefix,
 	    metric);
-	if (help != NULL)
-		(void) printf("# HELP %s %s\n", metric_name, help);
-	if (type != NULL)
-		(void) printf("# TYPE %s %s\n", metric_name, type);
+	print_help_type(metric_name, help, type);
 	if (label != NULL)
-		(void) printf("%s{%s} %lu\n", metric_name, label, value & mask);
+		(void) printf("%s{%s} %"PRIu64"\n", metric_name, label,
+		    value & mask);
 	else
-		(void) printf("%s %lu\n", metric_name, value & mask);
+		(void) printf("%s %"PRIu64"\n", metric_name, value & mask);
 }
 
 /*
@@ -142,10 +161,7 @@ print_prom_d(char *prefix, char *metric, char *label, double value,
 	char metric_name[200];
 	(void) snprintf(metric_name, sizeof(metric_name), "%s_%s", prefix,
 	    metric);
-	if (help != NULL)
-		(void) printf("# HELP %s %s\n", metric_name, help);
-	if (type != NULL)
-		(void) printf("# TYPE %s %s\n", metric_name, type);
+	print_help_type(metric_name, help, type);
 	if (label != NULL)
 		(void) printf("%s{%s} %f\n", metric_name, label, value);
 	else
@@ -305,12 +321,13 @@ get_vdev_name(nvlist_t *nvroot, const char *parent_name) {
  */
 char *
 get_vdev_desc(nvlist_t *nvroot, const char *parent_name) {
-	static char vdev_desc[256];
+	char vdev_desc[256];
 	char *vdev_type = NULL;
 	uint64_t vdev_id = 0;
 	char vdev_value[256];
 	char *vdev_path = NULL;
 	char vdev_path_value[256];
+	static char res[512];
 
 	if (nvlist_lookup_string(nvroot, ZPOOL_CONFIG_TYPE, &vdev_type) != 0) {
 		vdev_type = "unknown";
@@ -328,7 +345,7 @@ get_vdev_desc(nvlist_t *nvroot, const char *parent_name) {
 		    vdev_type);
 	} else {
 		(void) snprintf(vdev_value, sizeof(vdev_value),
-		    "vdev=\"%s/%s-%lu\"",
+		    "vdev=\"%s/%s-%"PRIu64"\"",
 		    parent_name, vdev_type, vdev_id);
 	}
 	if (vdev_path == NULL) {
@@ -337,9 +354,8 @@ get_vdev_desc(nvlist_t *nvroot, const char *parent_name) {
 		(void) snprintf(vdev_path_value, sizeof(vdev_path_value),
 		    ",path=\"%s\"", vdev_path);
 	}
-	(void) snprintf(vdev_desc, sizeof(vdev_desc), "%s%s", vdev_value,
-	    vdev_path_value);
-	return (vdev_desc);
+	(void) snprintf(res, sizeof(res), "%s%s", vdev_value, vdev_path_value);
+	return (res);
 }
 
 /*
@@ -362,27 +378,28 @@ print_vdev_latency_stats(nvlist_t *nvroot, const char *pool_name,
 	char *p = POOL_LATENCY_MEASUREMENT;
 	char s[2 * ZFS_MAX_DATASET_NAME_LEN];
 	char t[2 * ZFS_MAX_DATASET_NAME_LEN];
+	char metric_name[2 * ZFS_MAX_DATASET_NAME_LEN];
 	char *vdev_desc = NULL;
 
 	/* short_names become part of the metric name */
 	struct lat_lookup {
-	    char *name;
-	    char *short_name;
+		char *name;
+		char *short_name;
 	};
 	struct lat_lookup lat_type[] = {
-	    {ZPOOL_CONFIG_VDEV_TOT_R_LAT_HISTO,   "total_read"},
-	    {ZPOOL_CONFIG_VDEV_TOT_W_LAT_HISTO,   "total_write"},
-	    {ZPOOL_CONFIG_VDEV_DISK_R_LAT_HISTO,  "disk_read"},
-	    {ZPOOL_CONFIG_VDEV_DISK_W_LAT_HISTO,  "disk_write"},
-	    {ZPOOL_CONFIG_VDEV_SYNC_R_LAT_HISTO,  "sync_read"},
-	    {ZPOOL_CONFIG_VDEV_SYNC_W_LAT_HISTO,  "sync_write"},
-	    {ZPOOL_CONFIG_VDEV_ASYNC_R_LAT_HISTO, "async_read"},
-	    {ZPOOL_CONFIG_VDEV_ASYNC_W_LAT_HISTO, "async_write"},
-	    {ZPOOL_CONFIG_VDEV_SCRUB_LAT_HISTO,   "scrub"},
+		{ZPOOL_CONFIG_VDEV_TOT_R_LAT_HISTO,	"total_read"},
+		{ZPOOL_CONFIG_VDEV_TOT_W_LAT_HISTO,	"total_write"},
+		{ZPOOL_CONFIG_VDEV_DISK_R_LAT_HISTO,	"disk_read"},
+		{ZPOOL_CONFIG_VDEV_DISK_W_LAT_HISTO,	"disk_write"},
+		{ZPOOL_CONFIG_VDEV_SYNC_R_LAT_HISTO,	"sync_read"},
+		{ZPOOL_CONFIG_VDEV_SYNC_W_LAT_HISTO,	"sync_write"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_R_LAT_HISTO,	"async_read"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_W_LAT_HISTO,	"async_write"},
+		{ZPOOL_CONFIG_VDEV_SCRUB_LAT_HISTO,	"scrub"},
 #ifdef ZPOOL_CONFIG_VDEV_TRIM_LAT_HISTO
-	    {ZPOOL_CONFIG_VDEV_TRIM_LAT_HISTO,    "trim"},
+		{ZPOOL_CONFIG_VDEV_TRIM_LAT_HISTO,	"trim"},
 #endif
-	    {NULL,                                NULL}
+		{NULL,					NULL}
 	};
 
 	if (nvlist_lookup_nvlist(nvroot,
@@ -402,11 +419,11 @@ print_vdev_latency_stats(nvlist_t *nvroot, const char *pool_name,
 		/* count */
 		sum = 0;
 		end = c - 1;
-		(void) printf(
-		    "# HELP %s_%s_seconds latency distribution\n",
-		    p, lat_type[i].name);
-		(void) printf("# TYPE %s_%s_seconds histogram\n",
-		    p, lat_type[i].name);
+		(void) snprintf(metric_name, sizeof(metric_name),
+		  "%s_%s_seconds", p, lat_type[i].name);
+		print_help_type(metric_name, "latency distribution",
+		    "histogram");
+
 		for (int j = 0; j <= end; j++) {
 			sum += lat_array[j];
 			(void) snprintf(s, sizeof(s),
@@ -456,99 +473,100 @@ print_vdev_latency_stats(nvlist_t *nvroot, const char *pool_name,
  */
 int
 print_vdev_size_stats(nvlist_t *nvroot, const char *pool_name,
-                         const char *parent_name) {
-    uint_t c, end;
-    nvlist_t *nv, *nv_ex;
-    uint64_t *size_array;
-    uint64_t sum;
-    char *p = POOL_IO_SIZE_MEASUREMENT;
-    char s[2 * ZFS_MAX_DATASET_NAME_LEN];
-    char t[2 * ZFS_MAX_DATASET_NAME_LEN];
-    char *vdev_desc = NULL;
+			 const char *parent_name) {
+	uint_t c, end;
+	nvlist_t *nv, *nv_ex;
+	uint64_t *size_array;
+	uint64_t sum;
+	char *p = POOL_IO_SIZE_MEASUREMENT;
+	char s[2 * ZFS_MAX_DATASET_NAME_LEN];
+	char t[2 * ZFS_MAX_DATASET_NAME_LEN];
+	char metric_name[2 * ZFS_MAX_DATASET_NAME_LEN];
+	char *vdev_desc = NULL;
 
-    /* short_names become part of the metric name */
-    struct size_lookup {
-        char *name;
-        char *short_name;
-    };
-    struct size_lookup size_type[] = {
-            {ZPOOL_CONFIG_VDEV_SYNC_IND_R_HISTO,   "sync_read_ind"},
-            {ZPOOL_CONFIG_VDEV_SYNC_IND_W_HISTO,   "synd_write_ind"},
-            {ZPOOL_CONFIG_VDEV_ASYNC_IND_R_HISTO,  "async_read_ind"},
-            {ZPOOL_CONFIG_VDEV_ASYNC_IND_W_HISTO,  "async_write_ind"},
-            {ZPOOL_CONFIG_VDEV_IND_SCRUB_HISTO,    "scrub_read_ind"},
-            {ZPOOL_CONFIG_VDEV_SYNC_AGG_R_HISTO,   "sync_read_agg"},
-            {ZPOOL_CONFIG_VDEV_SYNC_AGG_W_HISTO,   "sync_write_agg"},
-            {ZPOOL_CONFIG_VDEV_ASYNC_AGG_R_HISTO,  "async_read_agg"},
-            {ZPOOL_CONFIG_VDEV_ASYNC_AGG_W_HISTO,  "async_write_agg"},
-            {ZPOOL_CONFIG_VDEV_AGG_SCRUB_HISTO,    "scrub_read_agg"},
+	/* short_names become part of the metric name */
+	struct size_lookup {
+	char *name;
+	char *short_name;
+	};
+	struct size_lookup size_type[] = {
+		{ZPOOL_CONFIG_VDEV_SYNC_IND_R_HISTO,	"sync_read_ind"},
+		{ZPOOL_CONFIG_VDEV_SYNC_IND_W_HISTO,	"sync_write_ind"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_IND_R_HISTO,	"async_read_ind"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_IND_W_HISTO,	"async_write_ind"},
+		{ZPOOL_CONFIG_VDEV_IND_SCRUB_HISTO,	"scrub_read_ind"},
+		{ZPOOL_CONFIG_VDEV_SYNC_AGG_R_HISTO,	"sync_read_agg"},
+		{ZPOOL_CONFIG_VDEV_SYNC_AGG_W_HISTO,	"sync_write_agg"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_AGG_R_HISTO,	"async_read_agg"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_AGG_W_HISTO,	"async_write_agg"},
+		{ZPOOL_CONFIG_VDEV_AGG_SCRUB_HISTO,	"scrub_read_agg"},
 #ifdef ZPOOL_CONFIG_VDEV_IND_TRIM_HISTO
-            {ZPOOL_CONFIG_VDEV_IND_TRIM_HISTO,    "trim_write_ind"},
-            {ZPOOL_CONFIG_VDEV_AGG_TRIM_HISTO,    "trim_write_agg"},
+		{ZPOOL_CONFIG_VDEV_IND_TRIM_HISTO,	"trim_write_ind"},
+		{ZPOOL_CONFIG_VDEV_AGG_TRIM_HISTO,	"trim_write_agg"},
 #endif
-            {NULL,                                NULL}
-    };
+		{NULL,					NULL}
+	};
 
-    if (nvlist_lookup_nvlist(nvroot,
-            ZPOOL_CONFIG_VDEV_STATS_EX, &nv_ex) != 0) {
-        return (6);
-    }
+	if (nvlist_lookup_nvlist(nvroot,
+		ZPOOL_CONFIG_VDEV_STATS_EX, &nv_ex) != 0) {
+	return (6);
+	}
 
-    vdev_desc = get_vdev_desc(nvroot, parent_name);
+	vdev_desc = get_vdev_desc(nvroot, parent_name);
 
-    for (int i = 0; size_type[i].name; i++) {
-        if (nvlist_lookup_uint64_array(nv_ex,
-                size_type[i].name, (uint64_t **) &size_array, &c) != 0) {
-            fprintf(stderr, "error: can't get %s\n",
-                    size_type[i].name);
-            return (3);
-        }
-        /* count */
-        sum = 0;
-        end = c - 1;
-        (void) printf(
-                "# HELP %s_%s_bytes I/O request size distribution\n",
-                p, size_type[i].short_name);
-        (void) printf("# TYPE %s_%s_bytes histogram\n",
-                p, size_type[i].short_name);
-        for (int j = 0; j <= end; j++) {
-            sum += size_array[j];
-            (void) snprintf(s, sizeof(s),
-                    "%s_bytes_bucket", size_type[i].short_name);
+	for (int i = 0; size_type[i].name; i++) {
+	if (nvlist_lookup_uint64_array(nv_ex,
+		size_type[i].name, (uint64_t **) &size_array, &c) != 0) {
+		fprintf(stderr, "error: can't get %s\n",
+			size_type[i].name);
+		return (3);
+	}
+	/* count */
+	sum = 0;
+	end = c - 1;
+	(void) snprintf(metric_name, sizeof(metric_name),
+	    "%s_%s_bytes", p, size_type[i].short_name);
+	print_help_type(metric_name, "I/O request size distribution",
+	    "histogram");
 
-            if (j >= MIN_SIZE_INDEX && j <= end) {
-                (void) snprintf(t, sizeof(t),
-                                "name=\"%s\",%s,le=\"%d\"",
-                                pool_name, vdev_desc, 1 << j);
-                print_prom_u64(p, s, t, sum,
-                               NULL, NULL);
-            }
-            if (j == end) {
-                (void) snprintf(t, sizeof(t),
-                                "name=\"%s\",%s,le=\"+Inf\"",
-                                pool_name, vdev_desc);
-                print_prom_u64(p, s, t, sum,
-                               NULL, NULL);
+	for (int j = 0; j <= end; j++) {
+		sum += size_array[j];
+		(void) snprintf(s, sizeof(s),
+			"%s_bytes_bucket", size_type[i].short_name);
 
-                /*
-                 * TODO: zpool code update to include sum?
-                 * Though sum is useless here and arguably redundant with other
-                 * I/O size measurements. Does it makes sense to sum?
-                 */
-                (void) snprintf(s, sizeof(s),
-                                "%s_bytes_sum", size_type[i].short_name);
-                (void) snprintf(t, sizeof(t),
-                                "name=\"%s\",%s",
-                                pool_name, vdev_desc);
-                print_prom_u64(p, s, t, 0, NULL, NULL);
+		if (j >= MIN_SIZE_INDEX && j <= end) {
+		(void) snprintf(t, sizeof(t),
+				"name=\"%s\",%s,le=\"%d\"",
+				pool_name, vdev_desc, 1 << j);
+		print_prom_u64(p, s, t, sum,
+				   NULL, NULL);
+		}
+		if (j == end) {
+		(void) snprintf(t, sizeof(t),
+				"name=\"%s\",%s,le=\"+Inf\"",
+				pool_name, vdev_desc);
+		print_prom_u64(p, s, t, sum,
+				   NULL, NULL);
 
-                (void) snprintf(s, sizeof(s),
-                                "%s_bytes_count", size_type[i].short_name);
-                print_prom_u64(p, s, t, sum, NULL, NULL);
-            }
-        }
-    }
-    return (0);
+		/*
+		 * TODO: zpool code update to include sum?
+		 * Though sum is useless here and arguably redundant with other
+		 * I/O size measurements. Does it makes sense to sum?
+		 */
+		(void) snprintf(s, sizeof(s),
+				"%s_bytes_sum", size_type[i].short_name);
+		(void) snprintf(t, sizeof(t),
+				"name=\"%s\",%s",
+				pool_name, vdev_desc);
+		print_prom_u64(p, s, t, 0, NULL, NULL);
+
+		(void) snprintf(s, sizeof(s),
+				"%s_bytes_count", size_type[i].short_name);
+		print_prom_u64(p, s, t, sum, NULL, NULL);
+		}
+	}
+	}
+	return (0);
 }
 
 /*
@@ -567,21 +585,21 @@ print_queue_stats(nvlist_t *nvroot, const char *pool_name,
 
 	/* short_names become part of the metric name */
 	struct queue_lookup {
-	    char *name;
-	    char *short_name;
+		char *name;
+		char *short_name;
 	};
 	struct queue_lookup queue_type[] = {
-	    {ZPOOL_CONFIG_VDEV_SYNC_R_ACTIVE_QUEUE,  "sync_r_active_queue"},
-	    {ZPOOL_CONFIG_VDEV_SYNC_W_ACTIVE_QUEUE,  "sync_w_active_queue"},
-	    {ZPOOL_CONFIG_VDEV_ASYNC_R_ACTIVE_QUEUE, "async_r_active_queue"},
-	    {ZPOOL_CONFIG_VDEV_ASYNC_W_ACTIVE_QUEUE, "async_w_active_queue"},
-	    {ZPOOL_CONFIG_VDEV_SCRUB_ACTIVE_QUEUE,  "async_scrub_active_queue"},
-	    {ZPOOL_CONFIG_VDEV_SYNC_R_PEND_QUEUE,    "sync_r_pend_queue"},
-	    {ZPOOL_CONFIG_VDEV_SYNC_W_PEND_QUEUE,    "sync_w_pend_queue"},
-	    {ZPOOL_CONFIG_VDEV_ASYNC_R_PEND_QUEUE,   "async_r_pend_queue"},
-	    {ZPOOL_CONFIG_VDEV_ASYNC_W_PEND_QUEUE,   "async_w_pend_queue"},
-	    {ZPOOL_CONFIG_VDEV_SCRUB_PEND_QUEUE,     "async_scrub_pend_queue"},
-	    {NULL,                                   NULL}
+		{ZPOOL_CONFIG_VDEV_SYNC_R_ACTIVE_QUEUE,  "sync_r_active_queue"},
+		{ZPOOL_CONFIG_VDEV_SYNC_W_ACTIVE_QUEUE,  "sync_w_active_queue"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_R_ACTIVE_QUEUE, "async_r_active_queue"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_W_ACTIVE_QUEUE, "async_w_active_queue"},
+		{ZPOOL_CONFIG_VDEV_SCRUB_ACTIVE_QUEUE,  "async_scrub_active_queue"},
+		{ZPOOL_CONFIG_VDEV_SYNC_R_PEND_QUEUE,	"sync_r_pend_queue"},
+		{ZPOOL_CONFIG_VDEV_SYNC_W_PEND_QUEUE,	"sync_w_pend_queue"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_R_PEND_QUEUE,   "async_r_pend_queue"},
+		{ZPOOL_CONFIG_VDEV_ASYNC_W_PEND_QUEUE,   "async_w_pend_queue"},
+		{ZPOOL_CONFIG_VDEV_SCRUB_PEND_QUEUE,     "async_scrub_pend_queue"},
+		{NULL,                                   NULL}
 	};
 
 	if (nvlist_lookup_nvlist(nvroot,
@@ -635,7 +653,7 @@ print_summary_stats(nvlist_t *nvroot, const char *pool_name,
 	/* Show the raw state enums. See zfs.h for the current descriptions	 */
 	print_prom_u64(p, "state", l, vs->vs_state, "current state, see zfs.h",
 	    "gauge");
-    print_prom_u64(p, "aux_state", l, vs->vs_aux, "auxiliary state, see zfs.h",
+	print_prom_u64(p, "aux_state", l, vs->vs_aux, "auxiliary state, see zfs.h",
         "gauge");
 
 	print_prom_u64(p, "alloc_bytes", l, vs->vs_alloc,
@@ -743,9 +761,9 @@ print_stats(zpool_handle_t *zhp, void *data) {
 	if (err == 0)
 		err = print_recursive_stats(print_vdev_latency_stats, nvroot,
 		    pool_name, NULL, 1);
-    if (err == 0)
-        err = print_recursive_stats(print_vdev_size_stats, nvroot,
-            pool_name, NULL, 1);
+	if (err == 0)
+		err = print_recursive_stats(print_vdev_size_stats, nvroot,
+		    pool_name, NULL, 1);
 	if (err == 0)
 		err = print_recursive_stats(print_queue_stats, nvroot,
 		    pool_name, NULL, 0);
@@ -765,6 +783,10 @@ main(int argc, char *argv[]) {
 		    "error: cannot initialize libzfs. "
 		    "Is the zfs module loaded or zrepl running?");
 		exit(1);
+	}
+	if (nvlist_alloc(&metric_names, NV_UNIQUE_NAME, 0) != 0) {
+	    fprintf(stderr, "error: cannot allocate memory");
+	    exit(1);
 	}
 	if (argc > 1) {
 		return (zpool_iter(g_zfs, print_stats, argv[1]));

@@ -48,7 +48,7 @@ The following labels are added to the metrics:
 | path | zpool_latency | device path name, if available |
 
 #### vdev names
-The vdev names represent the heirarchy of the pool configuration.
+The vdev names represent the hierarchy of the pool configuration.
 The top of the pool is "root" and the pool configuration follows 
 beneath. A slash '/' is used to separate the levels.
 
@@ -88,7 +88,7 @@ Note that the special device does not carry a special description.
 Log, cache, and spares are similarly not described in the hierarchy.
 
 In some cases, the hierarchy can change over time. For example, if a 
-vdev is removed, replaced, or attached then the heirarchy can grow or 
+vdev is removed, replaced, or attached then the hierarchy can grow or 
 shrink as the vdevs come and go. Thus to determine the stats for a specific
 physical device, use the `path`
 
