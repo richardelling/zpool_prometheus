@@ -1,0 +1,12 @@
+FROM ubuntu:rolling
+
+WORKDIR /zpool_prometheus
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends cmake make gcc libc-dev libzfslinux-dev
+
+RUN cp CMakeLists.ubuntu.txt CMakeLists.txt \
+ && mkdir -p build.container \
+ && cd build.container \
+ && cmake .. \
+ && make -j$(nproc)
