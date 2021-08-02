@@ -7,6 +7,7 @@ project(zpool_prometheus C)
 #     -D ZFS_INSTALL_BASE=/usr
 # on the cmake command-line.
 set(ZFS_INSTALL_BASE /usr/local CACHE STRING "zfs installation base directory")
+set(CMAKE_INSTALL_PREFIX /usr/local)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_LARGEFILE64_SOURCE")
 
@@ -15,4 +16,4 @@ link_directories(${ZFS_INSTALL_BASE}/lib)
 add_executable(zpool_prometheus
         zpool_prometheus.c)
 target_link_libraries(zpool_prometheus zfs nvpair)
-install(TARGETS zpool_prometheus DESTINATION ${ZFS_INSTALL_BASE}/bin)
+install(TARGETS zpool_prometheus DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)

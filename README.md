@@ -124,7 +124,7 @@ It is as simple as possible, but no simpler.
 By default, [ZFSonLinux](https://github.com/zfsonlinux/zfs) 
 installs the necessary header and library files in _/usr/local_.
 If you place those files elsewhere, then edit _CMakeLists.txt_ and
-change the _INSTALL_DIR_
+change the _CMAKE_INSTALL_PREFIX_
 ```bash
 # generic ZFSonLinux build
 cmake .
@@ -159,7 +159,7 @@ There are two basic methods known to work:
 
 Helpful comments in the source code are available.
 
-To install the _zpool_prometheus_ executable in _INSTALL_DIR_, use
+To install the _zpool_prometheus_ executable in _CMAKE_INSTALL_PREFIX_, use
 ```bash
 make install
 ```
