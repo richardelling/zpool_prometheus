@@ -6,6 +6,7 @@ project(zpool_prometheus C)
 set(ZFS_INSTALL_BASE /usr CACHE STRING "zfs installation base directory")
 set(CMAKE_INSTALL_PREFIX /usr/local)
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_LARGEFILE64_SOURCE")
 
 include_directories(${ZFS_INSTALL_BASE}/include/libspl ${ZFS_INSTALL_BASE}/include/libzfs)
 link_directories(${ZFS_INSTALL_BASE}/lib)
