@@ -177,10 +177,10 @@ int
 print_scan_status(nvlist_t *nvroot, const char *pool_name) {
 	uint_t c;
 	int64_t elapsed;
-	uint64_t examined, pass_exam, paused_time, paused_ts, rate;
+	uint64_t examined, issued, pass_exam, pass_scanned, pass_issued, paused_time, paused_ts, scan_rate, issue_rate, total, rate, scanned, to_issue;
 	uint64_t remaining_time;
 	pool_scan_stat_t *ps = NULL;
-	double pct_done;
+	double scan_pct_done, issue_pct_done;
 	char *state[DSS_NUM_STATES] = {"none", "scanning", "finished",
 	                               "canceled"};
 	char *func = "unknown_function";
@@ -217,11 +217,18 @@ print_scan_status(nvlist_t *nvroot, const char *pool_name) {
 			func = "scan";
 	}
 
+	scanned = ps->pss_examined;
+	issued = ps->pss_issued;
+	pass_issued = ps->pss_pass_issued;
+	total = ps->pss_to_examine;
+
 	/* overall progress */
-	examined = ps->pss_examined ? ps->pss_examined : 1;
-	pct_done = 0.0;
+	issue_pct_done = 0.0;
+	scan_pct_done = 0.0;
+
 	if (ps->pss_to_examine > 0)
-		pct_done = 100.0 * examined / ps->pss_to_examine;
+		scan_pct_done = 100.0 * scanned / total;
+		issue_pct_done = 100.0 * issued / total;
 
 #ifdef EZFS_SCRUB_PAUSED
 	paused_ts = ps->pss_pass_scrub_pause;
@@ -235,18 +242,21 @@ print_scan_status(nvlist_t *nvroot, const char *pool_name) {
 	if (ps->pss_state == DSS_SCANNING) {
 		elapsed = time(NULL) - ps->pss_pass_start - paused_time;
 		elapsed = (elapsed > 0) ? elapsed : 1;
-		pass_exam = ps->pss_pass_exam ? ps->pss_pass_exam : 1;
-		rate = pass_exam / elapsed;
-		rate = (rate > 0) ? rate : 1;
-		remaining_time = ps->pss_to_examine - examined / rate;
+		scan_rate = pass_scanned / elapsed;
+		issue_rate = pass_issued / elapsed;
+		remaining_time = (issue_rate != 0 && total >= issued) ? ((total - issued) / issue_rate) : UINT64_MAX;
+		to_issue = total - issued;
+		
 	} else {
 		elapsed = ps->pss_end_time - ps->pss_pass_start - paused_time;
 		elapsed = (elapsed > 0) ? elapsed : 1;
-		pass_exam = ps->pss_pass_exam ? ps->pss_pass_exam : 1;
-		rate = pass_exam / elapsed;
+		scan_rate = 0;
+		issue_rate = 0;
 		remaining_time = 0;
+		to_issue = 0;
 	}
-	rate = rate ? rate : 1;
+	scan_rate = scan_rate ? scan_rate : 1;
+	issue_rate = issue_rate ? issue_rate : 1;
 
 	(void) snprintf(l, sizeof(l), "name=\"%s\",state=\"%s\"", pool_name,
 	    state[ps->pss_state]);
@@ -260,23 +270,28 @@ print_scan_status(nvlist_t *nvroot, const char *pool_name) {
 	    "scan pause duration", "gauge");
 	print_prom_u64(p, "remaining_time_seconds", l, remaining_time,
 	    "estimate of examination time remaining", "gauge");
-
 	print_prom_u64(p, "errors", l, ps->pss_errors,
 	    "errors detected during scan)", "counter");
-	print_prom_u64(p, "examined_bytes", l, examined,
+	print_prom_u64(p, "examined_bytes", l, scanned,
 	    "bytes examined", "counter");
-	print_prom_u64(p, "examined_pass_bytes", l, pass_exam,
+	print_prom_u64(p, "issued_bytes", l, issued,
+	    "bytes issued", "counter");
+	print_prom_u64(p, "examined_pass_bytes", l, scanned,
 	    "bytes examined for this pass", "counter");
-	print_prom_d(p, "percent_done_ratio", l, pct_done,
+	print_prom_u64(p, "issued_pass_bytes", l, pass_issued,
+	    "bytes issued for this pass", "counter");
+	print_prom_d(p, "percent_examined_done_ratio", l, scan_pct_done,
 	    "percent of bytes examined", "gauge");
-	print_prom_u64(p, "processed_bytes", l, ps->pss_processed,
-	    "total bytes processed", "counter");
-	print_prom_u64(p, "examined_bytes_per_second", l, rate,
+	print_prom_d(p, "percent_issued_done_ratio", l, issue_pct_done,
+	    "percent of bytes issued", "gauge");
+	print_prom_u64(p, "examined_bytes_per_second", l, scan_rate,
 	    "examination rate over current pass", "gauge");
-	print_prom_u64(p, "to_examine_bytes", l, ps->pss_to_examine,
-	    "bytes remaining to examine", "gauge");
-	print_prom_u64(p, "to_process_bytes", l, ps->pss_to_process,
-	    "bytes remaining to process", "gauge");
+	print_prom_u64(p, "issued_bytes_per_second", l, issue_rate,
+	    "issue rate over current pass", "gauge");
+	print_prom_u64(p, "to_examine_bytes", l, total,
+	    "total bytes to scan", "gauge");
+	print_prom_u64(p, "to_issue_bytes", l, to_issue,
+	    "bytes remaining to issue", "gauge");
 
 	return (0);
 }
