@@ -144,6 +144,22 @@ make
 
 If successful, the _zpool_prometheus_ executable is created.
 
+### Using Containers
+You can also build it using containers by running:
+
+```
+docker build -v "${PWD}":/zpool_prometheus -f Dockerfile.ubuntu .
+
+```
+
+The build files will be in the _build.container_ directory. If compiled successfully
+you can find the _zpool_prometheus_ executable in there.
+
+Note that the _zpool_prometheus_ executable must be built in an environment that
+matches the desired deployment environment (i.e. distro and version). You can adapt
+the given Dockerfile to match your environment. This can be as simple as changing
+the `FROM ...` line within distro families.
+
 ## Installing
 Installation is left as an exercise for the reader because
 there are many different methods that can be used.
